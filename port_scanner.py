@@ -2,49 +2,68 @@ import socket
 import sys
 from datetime import datetime
 
-# use scanme nmap as a target for testing
-# use the URL as input for the target website, you want to check
-URL = input("Enter target URL: ")
+""" TODO:
+    improve exception handling, output handling
+    add multithreading
+    banner grabbing?
+    validate input port range
+"""
 
-# try to get the IP for the website to avoid the addition of the overhead DNS lookup - may slow down the initial connection
-try: 
-    target = socket.gethostbyname(URL) 
-except socket.gaierror: 
+def resolve_host(url):
+    return socket.gethostbyname(url) 
 
-    # this means could not resolve the host 
-    print ("there was an error resolving the host")
-    # stop here in case of a problem
-    sys.exit() 
-
-# make output a bit more informative
-print("-" * 50)
-print("Scanning target: " + target)
-print("Scan started at: " + str(datetime.now()))
-print("-" * 50)
-
-# handle exceptions
-try:
-    # loop port range for checking
-    for port in range(1, 1500):
-        # initialize socket object with connection-oriented TCP
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(1)
+def print_header(target):
+    print("-" * 50)
+    print("Scanning target: " + target)
+    print("Scan started at: " + str(datetime.now()))
+    print("-" * 50)
     
-        result = s.connect_ex((target, port))
-    
-        if result == 0:
-            print(f"Port {port} is OPEN")
-        else:
-            print(f"Port {port} is CLOSED")
-    
-        s.close()
+def port_scanner(target, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(1)
+        return sock.connect_ex((target, port)) == 0
 
-except KeyboardInterrupt:
-    print("\nExiting Program.")
-    sys.exit()
-except s.gaierror:
-   print("\nHostname could not resolved.")
-   sys.exit()
-except s.error:
-   print("\nServer not responding.")
-   sys.exit()	
+def port_range_scanner(url, port_to_check):
+    """ PORT SCANNER: checks if ports in a given range for a  specified website are open
+    
+    """
+    start_port, end_port = port_to_check.split(" ")
+    
+    
+    # try to get the IP for the website to avoid the addition of the overhead DNS lookup - may slow down the initial connection
+    try: 
+        target = resolve_host(url)
+    except socket.gaierror: 
+    
+        # this means could not resolve the host 
+        print ("there was an error resolving the host")
+        # stop here in case of a problem
+        sys.exit() 
+    
+    
+    print_header(target)
+    # handle exceptions
+    try:
+        # loop port range for checking
+        for port in range(int(start_port), int(end_port)+1):
+            # initialize socket object with connection-oriented TCP
+            if port_scanner(target, port):
+                print(f"Port {port} is OPEN")
+            # else:
+            #     print(f"Port {port} is CLOSED")
+        
+    
+    except KeyboardInterrupt:
+        print("\nExiting Program.")
+        sys.exit()
+    except socket.error:
+       print("\nServer not responding.")
+       sys.exit()	
+
+if __name__ == "__main__":
+    # use scanme nmap as a target for testing
+    # use the url as input for the target website, you want to check
+    url = input("Enter target url: ")
+    port_to_check = input("Enter port range as integes (required format 'start end'): ")
+
+    port_range_scanner(url, port_to_check)
