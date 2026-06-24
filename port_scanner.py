@@ -17,17 +17,36 @@ def print_header(target):
     print("Scanning target: " + target)
     print("Scan started at: " + str(datetime.now()))
     print("-" * 50)
+
+def validate_port_range_input(port_range):
+    try:
+        start_port, end_port = port_range.split()
+        start_port = int(start_port)
+        end_port = int(end_port)
+    except ValueError:
+        raise ValueError(
+            "Port range must be separated by a space."
+            )
+    if start_port < 1 or end_port > 65535:
+        raise ValueError(
+            "Ports must be between 1 and 65535."
+            )
+    if start_port > end_port:
+        raise ValueError(
+            "Start port must be smaller than end port."
+            )
+    return start_port, end_port
     
 def port_scanner(target, port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(1)
         return sock.connect_ex((target, port)) == 0
 
-def port_range_scanner(url, port_to_check):
+def port_range_scanner(url, start_port, end_port):
     """ PORT SCANNER: checks if ports in a given range for a  specified website are open
     
     """
-    start_port, end_port = port_to_check.split(" ")
+    
     
     
     # try to get the IP for the website to avoid the addition of the overhead DNS lookup - may slow down the initial connection
@@ -45,7 +64,7 @@ def port_range_scanner(url, port_to_check):
     # handle exceptions
     try:
         # loop port range for checking
-        for port in range(int(start_port), int(end_port)+1):
+        for port in range(start_port, end_port+1):
             # initialize socket object with connection-oriented TCP
             if port_scanner(target, port):
                 print(f"Port {port} is OPEN")
@@ -64,6 +83,14 @@ if __name__ == "__main__":
     # use scanme nmap as a target for testing
     # use the url as input for the target website, you want to check
     url = input("Enter target url: ")
-    port_to_check = input("Enter port range as integes (required format 'start end'): ")
-
-    port_range_scanner(url, port_to_check)
+    while True:
+        port_range = input(
+            "Enter port range as integes (required format 'start end'): "
+            )
+        try:
+            start_port, end_port = validate_port_range_input(port_range)
+            break
+        except ValueError as err:
+            print(f"Error: {err}")
+    
+    port_range_scanner(url, start_port, end_port)
