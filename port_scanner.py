@@ -10,7 +10,9 @@ from datetime import datetime
 """
 
 def resolve_host(url):
-    return socket.gethostbyname(url) 
+    
+    target = socket.gethostbyname(url) 
+    return target
 
 def print_header(target):
     print("-" * 50)
@@ -42,55 +44,39 @@ def port_scanner(target, port):
         sock.settimeout(1)
         return sock.connect_ex((target, port)) == 0
 
-def port_range_scanner(url, start_port, end_port):
-    """ PORT SCANNER: checks if ports in a given range for a  specified website are open
+def port_range_scanner(target, start_port, end_port):
+    """ scan a range of ports for a specified website.
     
     """
     
     
+    # loop port range for checking
+    for port in range(start_port, end_port+1):
+        # initialize socket object with connection-oriented TCP
+        if port_scanner(target, port):
+            print(f"Port {port} is OPEN")
     
-    # try to get the IP for the website to avoid the addition of the overhead DNS lookup - may slow down the initial connection
-    try: 
-        target = resolve_host(url)
-    except socket.gaierror: 
-    
-        # this means could not resolve the host 
-        print ("there was an error resolving the host")
-        # stop here in case of a problem
-        sys.exit() 
-    
-    
-    print_header(target)
-    # handle exceptions
-    try:
-        # loop port range for checking
-        for port in range(start_port, end_port+1):
-            # initialize socket object with connection-oriented TCP
-            if port_scanner(target, port):
-                print(f"Port {port} is OPEN")
-            # else:
-            #     print(f"Port {port} is CLOSED")
-        
-    
-    except KeyboardInterrupt:
-        print("\nExiting Program.")
-        sys.exit()
-    except socket.error:
-       print("\nServer not responding.")
-       sys.exit()	
 
 if __name__ == "__main__":
-    # use scanme nmap as a target for testing
-    # use the url as input for the target website, you want to check
-    url = input("Enter target url: ")
-    while True:
+    step = 0
+    while step < 1:
+
+        hostname = input("Enter target hostname: ")
+        try:
+            target = resolve_host(hostname)
+            step += 1
+        except socket.gaierror: 
+            print("Could not resolve hostname.")             
+    while step < 2:
         port_range = input(
             "Enter port range as integes (required format 'start end'): "
             )
+
         try:
             start_port, end_port = validate_port_range_input(port_range)
-            break
+            step += 1
         except ValueError as err:
             print(f"Error: {err}")
     
-    port_range_scanner(url, start_port, end_port)
+    print_header(target)
+    port_range_scanner(target, start_port, end_port)
