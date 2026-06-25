@@ -1,26 +1,18 @@
 import socket
-import sys
 from datetime import datetime
 
 """ TODO:
-    improve exception handling, output handling
     add multithreading
     banner grabbing?
-    validate input port range
 """
 
-def resolve_host(url):
-    
-    target = socket.gethostbyname(url) 
+def resolve_host(hostname: str) -> str:
+    """ Resolve a hostname to an IP address."""
+    target = socket.gethostbyname(hostname) 
     return target
 
-def print_header(target):
-    print("-" * 50)
-    print("Scanning target: " + target)
-    print("Scan started at: " + str(datetime.now()))
-    print("-" * 50)
-
-def validate_port_range_input(port_range):
+def validate_port_range_input(port_range: str) -> tuple[int, int]:
+    """ Vaidate and parse a port range. """
     try:
         start_port, end_port = port_range.split()
         start_port = int(start_port)
@@ -37,24 +29,31 @@ def validate_port_range_input(port_range):
         raise ValueError(
             "Start port must be smaller than end port."
             )
-    return start_port, end_port
+    return start_port, end_port    
+
+def print_header(target: str) -> None:
+    """ Print scan info. """
+    print("-" * 50)
+    print("Scanning target: " + target)
+    print("Scan started at: " + str(datetime.now()))
+    print("-" * 50)
     
-def port_scanner(target, port):
+def port_scanner(target: str, port: int, timeout: float = 1.0) -> bool:
+    """ Check whether TCP port id open. """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(1)
+        sock.settimeout(timeout)
         return sock.connect_ex((target, port)) == 0
 
-def port_range_scanner(target, start_port, end_port):
-    """ scan a range of ports for a specified website.
+def port_range_scanner(target: str, start_port: int, end_port: int) -> list[int]:
+    """ Scan a range of ports for a specified website.
     
     """
-    
-    
+    open_ports = []
     # loop port range for checking
     for port in range(start_port, end_port+1):
-        # initialize socket object with connection-oriented TCP
         if port_scanner(target, port):
-            print(f"Port {port} is OPEN")
+            open_ports.append(port)
+    return open_ports
     
 
 if __name__ == "__main__":
@@ -66,7 +65,7 @@ if __name__ == "__main__":
             target = resolve_host(hostname)
             step += 1
         except socket.gaierror: 
-            print("Could not resolve hostname.")             
+            print("Could not resolve host.")             
     while step < 2:
         port_range = input(
             "Enter port range as integes (required format 'start end'): "
@@ -79,4 +78,7 @@ if __name__ == "__main__":
             print(f"Error: {err}")
     
     print_header(target)
-    port_range_scanner(target, start_port, end_port)
+    open_ports = port_range_scanner(target, start_port, end_port)
+    
+    for port in open_ports:        
+        print(f"Port {port} is OPEN")
