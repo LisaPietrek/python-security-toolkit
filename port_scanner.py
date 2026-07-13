@@ -1,9 +1,9 @@
 import socket
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 """ TODO:
-    add multithreading
-    banner grabbing?
+    banner grabbing
 """
 
 def resolve_host(hostname: str) -> str:
@@ -38,24 +38,35 @@ def print_header(target: str) -> None:
     print("Scan started at: " + str(datetime.now()))
     print("-" * 50)
     
-def port_scanner(target: str, port: int, timeout: float = 1.0) -> bool:
-    """ Check whether TCP port id open. """
+def is_port_open(target: str, port: int, timeout: float = 1.0) -> bool:
+    """ Check whether TCP port is open. """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
         return sock.connect_ex((target, port)) == 0
 
-def port_range_scanner(target: str, start_port: int, end_port: int) -> list[int]:
+def scan_port_range(target: str, start_port: int, end_port: int) -> list[int]:
     """ Scan a range of ports for a specified website.
     
     """
-    open_ports = []
-    # loop port range for checking
-    for port in range(start_port, end_port+1):
-        if port_scanner(target, port):
-            open_ports.append(port)
-    return open_ports
+    ports = range(start_port, end_port+1)
+    scan_tasks = ((target, port) 
+                  for port in ports)
+    max_workers = min(100, len(ports))
     
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = executor.map(scan_port,  scan_tasks) # use submit instead of map?
+        
+    open_ports = [r for r in results if r is not None]
+    return open_ports
 
+def scan_port(args):
+    target, port = args
+    if is_port_open(target, port):
+        return port
+    return None
+    
+    
+    
 if __name__ == "__main__":
     step = 0
     while step < 1:
@@ -78,7 +89,7 @@ if __name__ == "__main__":
             print(f"Error: {err}")
     
     print_header(target)
-    open_ports = port_range_scanner(target, start_port, end_port)
+    open_ports = scan_port_range(target, start_port, end_port)
     
     for port in open_ports:        
         print(f"Port {port} is OPEN")
