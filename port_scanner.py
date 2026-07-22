@@ -38,13 +38,33 @@ def print_header(target: str) -> None:
     print("Scan started at: " + str(datetime.now()))
     print("-" * 50)
     
-def is_port_open(target: str, port: int, timeout: float = 1.0) -> bool:
+    
+def scan_single_port(args: tuple[str, int]) -> dict:
     """ Check whether TCP port is open. """
+    target, port = args
+    out = dict()
+    is_open = False
+    banner = None
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(timeout)
-        return sock.connect_ex((target, port)) == 0
+        sock.settimeout(1.0)
+        
+        if sock.connect_ex((target, port)) == 0:
+            is_open = True
 
-def scan_port_range(target: str, start_port: int, end_port: int) -> list[int]:
+            # Receive the banner and decode it to a string
+            try: 
+                banner = sock.recv(1024).decode().strip()
+            except (socket.timeout, UnicodeDecodeError):
+                pass
+    out = {"port": port,
+           "open": is_open,
+           "banner": banner }
+        
+    return out
+              
+
+    
+def scan_port_range(target: str, start_port: int, end_port: int) -> dict:
     """ Scan a range of ports for a specified website.
     
     """
@@ -54,17 +74,10 @@ def scan_port_range(target: str, start_port: int, end_port: int) -> list[int]:
     max_workers = min(100, len(ports))
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = executor.map(scan_port,  scan_tasks) # use submit instead of map?
+        # use submit instead of map?
+        results = executor.map(scan_single_port,  scan_tasks)
         
-    open_ports = [r for r in results if r is not None]
-    return open_ports
-
-def scan_port(args):
-    target, port = args
-    if is_port_open(target, port):
-        return port
-    return None
-    
+    return results 
     
     
 if __name__ == "__main__":
@@ -89,7 +102,8 @@ if __name__ == "__main__":
             print(f"Error: {err}")
     
     print_header(target)
-    open_ports = scan_port_range(target, start_port, end_port)
+    scan_results = scan_port_range(target, start_port, end_port)
     
-    for port in open_ports:        
-        print(f"Port {port} is OPEN")
+    for port in scan_results:
+        if port["open"]:        
+            print(port) 
