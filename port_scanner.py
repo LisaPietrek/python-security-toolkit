@@ -2,13 +2,17 @@ import socket
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-""" TODO:
-    banner grabbing
+""" 
+Future improvements
+- HTTP probing
+- HTTPS probing
+- Service detection
+- JSON output
 """
 
 def resolve_host(hostname: str) -> str:
-    """ Resolve a hostname to an IP address."""
-    target = socket.gethostbyname(hostname) 
+    """ Resolve a hostname to an IP address. """
+    target = socket.gethostbyname(hostname)  
     return target
 
 def validate_port_range_input(port_range: str) -> tuple[int, int]:
@@ -40,7 +44,7 @@ def print_header(target: str) -> None:
     
     
 def scan_single_port(args: tuple[str, int]) -> dict:
-    """ Check whether TCP port is open. """
+    """ Scan a single TCP port and return scan results. """
     target, port = args
     out = dict()
     is_open = False
@@ -51,11 +55,13 @@ def scan_single_port(args: tuple[str, int]) -> dict:
         if sock.connect_ex((target, port)) == 0:
             is_open = True
 
-            # Receive the banner and decode it to a string
-            try: 
-                banner = sock.recv(1024).decode().strip()
-            except (socket.timeout, UnicodeDecodeError):
-                pass
+        # Receive the banner and decode it to a string
+        try: 
+            banner = sock.recv(1024).decode().strip()
+        except (socket.timeout, UnicodeDecodeError):
+            # for services that do not send a banner immediately after you connect but require request or handshake
+            # implement later, for now pass
+            pass
     out = {"port": port,
            "open": is_open,
            "banner": banner }
@@ -65,39 +71,36 @@ def scan_single_port(args: tuple[str, int]) -> dict:
 
     
 def scan_port_range(target: str, start_port: int, end_port: int) -> dict:
-    """ Scan a range of ports for a specified website.
-    
-    """
+    """ Scan a range of ports for a specified website. """
     ports = range(start_port, end_port+1)
     scan_tasks = ((target, port) 
                   for port in ports)
     max_workers = min(100, len(ports))
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # use submit instead of map?
         results = executor.map(scan_single_port,  scan_tasks)
         
     return results 
     
     
 if __name__ == "__main__":
-    step = 0
-    while step < 1:
+    while True:
 
         hostname = input("Enter target hostname: ")
         try:
             target = resolve_host(hostname)
-            step += 1
+            break 
         except socket.gaierror: 
             print("Could not resolve host.")             
-    while step < 2:
+            
+    while True:
         port_range = input(
             "Enter port range as integes (required format 'start end'): "
             )
 
         try:
             start_port, end_port = validate_port_range_input(port_range)
-            step += 1
+            break 
         except ValueError as err:
             print(f"Error: {err}")
     
