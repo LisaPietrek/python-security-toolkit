@@ -1,4 +1,4 @@
-#8 Python Security Toolkit
+# Python Security Toolkit
 
 A small cybersecurity-focused toolkit written in Python.
 
