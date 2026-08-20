@@ -2,6 +2,22 @@ from datetime import datetime
 from pydantic.dataclasses import dataclass
 import re, sys
 
+@dataclass
+class MessagePattern:
+    event: str
+    pattern: re.Pattern
+
+@dataclass
+class LogEntry:
+    timestamp: datetime
+    host: str
+    service: str
+    pid: int
+    event: str
+    user: str | None
+    ip: str | None
+    context: str | None
+
 HEADER_PATTERN = re.compile(
                         r"^(?P<month>\w+)\s+"
                         r"(?P<day>\d+)\s+"
@@ -12,14 +28,16 @@ HEADER_PATTERN = re.compile(
                         )
 
 # to keep it simple, we use  different patterns for the message
-# also a nice excercise for pattern matching
-
-
 REVERSE_MAPPING_PATTERN = re.compile(
     r"^reverse mapping checking getaddrinfo for "
     r"(?P<hostname>\S+) "
     r"\[(?P<ip>\d+\.\d+\.\d+\.\d+)\] "
     r"failed - (?P<warning>.+)$"
+)
+USERAUTH_INVALID_PATTERN = re.compile(
+    r"^input_userauth_request: invalid user "
+    r"(?P<username>\S+) "
+    r"\[(?P<context>\w+)\]$"
 )
 
 INVALID_USER_PATTERN = re.compile(
@@ -28,15 +46,10 @@ INVALID_USER_PATTERN = re.compile(
     r"from (?P<ip>\d+\.\d+\.\d+\.\d+)$"
 )
 
-USERAUTH_INVALID_PATTERN = re.compile(
-    r"^input_userauth_request: invalid user "
-    r"(?P<username>\S+) "
-    r"\[(?P<context>\w+)\]$"
-)
 
 AUTH_FAILURE_PATTERN = re.compile(
     r"^pam_unix\(sshd:auth\): authentication failure;.*"
-    r"rhost=(?P<ip>\d+\.\d+\.\d+.\d+)"
+    r"rhost=(?P<ip>\d+\.\d+\.\d+\.\d+)"
 )
 
 FAILED_PASSWORD_PATTERN = re.compile(
@@ -54,57 +67,81 @@ CONNECTION_CLOSED_PATTERN = re.compile(
     r"(?: \[(?P<context>\w+)\])?$"
 )
 
-PATTERNS = {
-    "failed_login": FAILED_PASSWORD_PATTERN,
+AUTH_USER_UNKNOWN_PATTERN = re.compile(
+    r"^pam_unix\(sshd:auth\): check pass; user unknown$"
+)
+
+MESSAGE_PATTERNS = {
+    "reverse_mapping_failed": REVERSE_MAPPING_PATTERN,
     "invalid_user": INVALID_USER_PATTERN,
-    "connection_closed": CONNECTION_CLOSED_PATTERN,
+    "invalid_user_authentication": USERAUTH_INVALID_PATTERN,
     "authentication_failure": AUTH_FAILURE_PATTERN,
+    "unknown_user": AUTH_USER_UNKNOWN_PATTERN,
+    "failed_login": FAILED_PASSWORD_PATTERN,
+    "connection_closed": CONNECTION_CLOSED_PATTERN,
 }
 
-"""
-Dec 10 06:55:46 LabSZ sshd[24200]: reverse mapping checking getaddrinfo for ns.marryaldkfaczcz.com [173.234.31.186] failed - POSSIBLE BREAK-IN ATTEMPT!
-Dec 10 06:55:46 LabSZ sshd[24200]: Invalid user webmaster from 173.234.31.186
-Dec 10 06:55:46 LabSZ sshd[24200]: input_userauth_request: invalid user webmaster [preauth]
-Dec 10 06:55:46 LabSZ sshd[24200]: pam_unix(sshd:auth): check pass; user unknown
-Dec 10 06:55:46 LabSZ sshd[24200]: pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=173.234.31.186
-Dec 10 06:55:48 LabSZ sshd[24200]: Failed password for invalid user webmaster from 173.234.31.186 port 38926 ssh2
-Dec 10 06:55:48 LabSZ sshd[24200]: Connection closed by 173.234.31.186 [preauth]
-Dec 10 07:02:47 LabSZ sshd[24203]: Connection closed by 212.47.254.145 [preauth]
-Dec 10 07:07:38 LabSZ sshd[24206]: Invalid user test9 from 52.80.34.196
-"""
+
+MESSAGE_PATTERNS = [
+    MessagePattern(
+        event="failed_authentication",
+        pattern=FAILED_PASSWORD_PATTERN
+    ),
+    MessagePattern(
+        event="failed_authentication",
+        pattern=AUTH_FAILURE_PATTERN
+    ),
+    MessagePattern(
+        event="invalid_user",
+        pattern=INVALID_USER_PATTERN
+    ),
+    MessagePattern(
+        event="invalid_user",
+        pattern=USERAUTH_INVALID_PATTERN
+    ),
+    MessagePattern(
+        event="unknown_user",
+        pattern=AUTH_USER_UNKNOWN_PATTERN
+    ),
+    MessagePattern(
+        event="connection_closed",
+        pattern=CONNECTION_CLOSED_PATTERN
+    ),
+    MessagePattern( 
+        event="suspicious_connection",
+        pattern=REVERSE_MAPPING_PATTERN
+    )
+]
+
 
 def parse_header(line: str) -> dict:
     match = HEADER_PATTERN.match(line)
     if match:   
        return match.groupdict()
 
-def parse_message(header_d: dict) -> dict:
-    message = header_d["message"]
-    print(message)
-    """some patterns do not work as expected - 
-    TODO: FIX"""
-#    for event, pattern in PATTERNS.items():
-#        match = pattern.match(message)
-#
-#        if match:
-#            return event, match.groupdict()
-#
-#    return None
-#
+def parse_message(message: str) -> dict:
+    for entry in MESSAGE_PATTERNS:
+        match = entry.pattern.match(message)
+
+        if match:
+            return {
+                "event": entry.event, **match.groupdict()
+            }
+    return None
+
 if __name__ == "__main__":
     file = sys.argv[1]
     with open(file) as f: 
         for i, line in enumerate(f):
-            if i >9 :
+            if i >19 :
                 break
             
             d = parse_header(line.strip())
-#            print(d)
-#            print(parse_message(d))
-            parse_message(d)
-            
-#    # made up test case
-#    line = "Aug  7 09:41:12 server sshd[1234]: Failed password for invalid user admin from 192.168.1.10 port 51432 ssh2"
-#    d = parse_header(line)
-#    print(d)
-#    print(parse_message(d))
+            m = parse_message(d["message"])
+            log_entry = LogEntry(
+                        host=d["host"],
+                        event=m["event"])
+            """TODO:
+            - continue filling log entry 
+            - consider NoneType in case pattern does not match line"""
+            print(log_entry)
