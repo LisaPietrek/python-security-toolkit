@@ -18,6 +18,7 @@ class LogEntry:
     ip: str | None = None
     context: str | None = None
     hostname: str | None = None
+    port: int | None = None
 
 HEADER_PATTERN = re.compile(
                         r"^(?P<month>\w+)\s+"
@@ -104,6 +105,7 @@ MESSAGE_PATTERNS = [
 
 
 def parse_header(line: str) -> dict | None:
+    """ Parses header of an entry in the log file using a regex. """
     match = HEADER_PATTERN.match(line)
     if match:   
        return match.groupdict()
@@ -111,6 +113,7 @@ def parse_header(line: str) -> dict | None:
     return None
 
 def parse_message(message: str) -> dict | None:
+    """ Parses the message of an log entry usin regex. """
     for entry in MESSAGE_PATTERNS:
         match = entry.pattern.match(message)
 
@@ -121,12 +124,14 @@ def parse_message(message: str) -> dict | None:
     return None
 
 def parse_timestamp(header: dict, year: int) -> datetime:
+    """ Parses time and date from the log header and transforms it to datetime. """
     return datetime.strptime(
         f"{year} {header['month']} {header['day']} {header['time']}",
         "%Y %b %d %H:%M:%S"
     )
 
 def create_log_entry(header: dict, message_data: dict, timestamp: datetime) -> LogEntry:
+    """ Creates ordered LogEntry. """
     return LogEntry(
         timestamp=timestamp,
         host=header["host"],
@@ -139,22 +144,28 @@ def create_log_entry(header: dict, message_data: dict, timestamp: datetime) -> L
     )
 
 if __name__ == "__main__":
+    log_entries = []
     file = sys.argv[1]
+    unmatched = {}
     
     with open(file) as f: 
         for i, line in enumerate(f):
-            if i >19 :
-                break
+    #        if i >190:
+    #            break
             
             header = parse_header(line.strip())
             if header is None:
                 continue
-            timestamp = parse_timestamp(header, year=2022)
+            timestamp = parse_timestamp(header, year=2023)
             message = parse_message(header["message"])
 
-            if message != None:
-                log_entry = create_log_entry(header, message, timestamp)
-                print(log_entry)
+            if message is None:
 
-            else:
-                print(line)
+                raw_message = header["message"]
+                unmatched[raw_message] = unmatched.get(raw_message, 0) + 1
+                continue
+
+            log_entry = create_log_entry(header, message, timestamp)
+            log_entries.append(log_entry)            
+    for message, count in unmatched.items():
+        print(f"{count}x: {message}")
