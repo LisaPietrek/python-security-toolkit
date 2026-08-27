@@ -14,9 +14,10 @@ class LogEntry:
     service: str
     pid: int
     event: str
-    user: str | None
-    ip: str | None
-    context: str | None
+    user: str | None = None
+    ip: str | None = None
+    context: str | None = None
+    hostname: str | None = None
 
 HEADER_PATTERN = re.compile(
                         r"^(?P<month>\w+)\s+"
@@ -31,8 +32,7 @@ HEADER_PATTERN = re.compile(
 REVERSE_MAPPING_PATTERN = re.compile(
     r"^reverse mapping checking getaddrinfo for "
     r"(?P<hostname>\S+) "
-    r"\[(?P<ip>\d+\.\d+\.\d+\.\d+)\] "
-    r"failed - (?P<warning>.+)$"
+    r"\[(?P<ip>\d+\.\d+\.\d+\.\d+)\].+$"
 )
 USERAUTH_INVALID_PATTERN = re.compile(
     r"^input_userauth_request: invalid user "
@@ -49,7 +49,7 @@ INVALID_USER_PATTERN = re.compile(
 
 AUTH_FAILURE_PATTERN = re.compile(
     r"^pam_unix\(sshd:auth\): authentication failure;.*"
-    r"rhost=(?P<ip>\d+\.\d+\.\d+\.\d+)"
+    r"rhost=(?P<ip>\d+\.\d+\.\d+\.\d+|\S+).*"
 )
 
 FAILED_PASSWORD_PATTERN = re.compile(
@@ -70,17 +70,6 @@ CONNECTION_CLOSED_PATTERN = re.compile(
 AUTH_USER_UNKNOWN_PATTERN = re.compile(
     r"^pam_unix\(sshd:auth\): check pass; user unknown$"
 )
-
-MESSAGE_PATTERNS = {
-    "reverse_mapping_failed": REVERSE_MAPPING_PATTERN,
-    "invalid_user": INVALID_USER_PATTERN,
-    "invalid_user_authentication": USERAUTH_INVALID_PATTERN,
-    "authentication_failure": AUTH_FAILURE_PATTERN,
-    "unknown_user": AUTH_USER_UNKNOWN_PATTERN,
-    "failed_login": FAILED_PASSWORD_PATTERN,
-    "connection_closed": CONNECTION_CLOSED_PATTERN,
-}
-
 
 MESSAGE_PATTERNS = [
     MessagePattern(
@@ -114,12 +103,14 @@ MESSAGE_PATTERNS = [
 ]
 
 
-def parse_header(line: str) -> dict:
+def parse_header(line: str) -> dict | None:
     match = HEADER_PATTERN.match(line)
     if match:   
        return match.groupdict()
 
-def parse_message(message: str) -> dict:
+    return None
+
+def parse_message(message: str) -> dict | None:
     for entry in MESSAGE_PATTERNS:
         match = entry.pattern.match(message)
 
@@ -129,19 +120,41 @@ def parse_message(message: str) -> dict:
             }
     return None
 
+def parse_timestamp(header: dict, year: int) -> datetime:
+    return datetime.strptime(
+        f"{year} {header['month']} {header['day']} {header['time']}",
+        "%Y %b %d %H:%M:%S"
+    )
+
+def create_log_entry(header: dict, message_data: dict, timestamp: datetime) -> LogEntry:
+    return LogEntry(
+        timestamp=timestamp,
+        host=header["host"],
+        service=header["service"],
+        pid=int(header["pid"]),
+        event=message_data["event"],
+        user=message_data.get("username"),
+        ip=message_data.get("ip"),
+        context=message_data.get("context")
+    )
+
 if __name__ == "__main__":
     file = sys.argv[1]
+    
     with open(file) as f: 
         for i, line in enumerate(f):
             if i >19 :
                 break
             
-            d = parse_header(line.strip())
-            m = parse_message(d["message"])
-            log_entry = LogEntry(
-                        host=d["host"],
-                        event=m["event"])
-            """TODO:
-            - continue filling log entry 
-            - consider NoneType in case pattern does not match line"""
-            print(log_entry)
+            header = parse_header(line.strip())
+            if header is None:
+                continue
+            timestamp = parse_timestamp(header, year=2022)
+            message = parse_message(header["message"])
+
+            if message != None:
+                log_entry = create_log_entry(header, message, timestamp)
+                print(log_entry)
+
+            else:
+                print(line)
